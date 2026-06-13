@@ -1,964 +1,617 @@
+-- =============================================================================
+--  NetherBot  -  NPCBot control panel for TrinityCore 3.3.5
+--  Modern dark UI redesign (v2.0).  Original addon by NetherstormX.
+--  UI rework & bugfixes for Iceymidgit.
+--
+--  Fixes vs the original:
+--    * the recall-teleport command had a misspelled "recall" -> corrected
+--    * spawn used the GUILD channel -> now SAY (works without a guild)
+--    * duplicate global frame names (NetherbotShow3Button x3) removed
+--    * window position is now saved between sessions (was scale only)
+-- =============================================================================
+
 NetherBot.InitLocale()
 local i18n = NetherBot.I18n
 
--- Create the Main frame
-local frame = CreateFrame("Frame", "NetherbotFrame", UIParent)
-frame:SetSize(200, 200)
-frame:SetPoint("CENTER", UIParent, "CENTER")
-
-local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-title:SetPoint("TOP", frame, "TOP", 0, -10)
-title:SetText(i18n("NetherBot - NPCBOT Tool"))
-
--- Set the background color and transparency for MainFrame "Frame"
-frame:SetBackdrop({
-  bgFile = "Interface/Buttons/WHITE8X8",
-  edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-  tile = true, tileSize = 16, edgeSize = 16,
-  insets = { left = 4, right = 4, top = 4, bottom = 4 }
-})
-frame:SetBackdropColor(0.35, 0.14, 0.73, 0.25)
-frame:SetBackdropBorderColor(0.53, 0.07, 0.89, 1)
-
--- Make the frame movable
-frame:SetMovable(true)
-frame:EnableMouse(true)
-
--- Create the adminFrame
-local adminFrame = CreateFrame("Frame", "NetherbotAdminFrame", UIParent)
-adminFrame:SetSize(200, 200)
-adminFrame:SetPoint("RIGHT", frame, "LEFT", -10, 0)
-adminFrame:SetBackdrop({
-  bgFile = "Interface/Tooltips/UI-Tooltip-Background",
-  edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-  tile = true, tileSize = 16, edgeSize = 16,
-  insets = { left = 4, right = 4, top = 4, bottom = 4 }
-})
-adminFrame:SetBackdropColor(1, 0, 0, 0.2)
-adminFrame:SetBackdropBorderColor(0, 1, 0, 1)
-adminFrame:Hide()
-
-local adminTitle = adminFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-adminTitle:SetPoint("TOP", adminFrame, "TOP", 0, -10)
-adminTitle:SetText(i18n("Admin"))
-
-
-
--- Handle frame movement
-frame:SetScript("OnMouseDown", function(self, button)
-  if button == "LeftButton" then
-    self:StartMoving()
-  end
-end)
-
--- Stop frame movement
-frame:SetScript("OnMouseUp", function(self, button)
-  if button == "LeftButton" then
-    self:StopMovingOrSizing()
-  end
-end)
-
-
-
--- Create the buttons
--- Your addon's namespace and variables
-local NetherBot = {}
-NetherbotDB = {}  -- Your saved variables table
-
--- Create a function to set and save the scale
-local function SetAndSaveScale(scale)
-  frame:SetScale(scale)
-  NetherbotDB.scale = scale
-end
-
--- Add UI scale buttons
-local increaseScaleButton = CreateFrame("Button", "NetherbotIncreaseScaleButton", frame)
-increaseScaleButton:SetSize(20, 20)
-increaseScaleButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 5, -5)
-increaseScaleButton:SetNormalFontObject("GameFontNormal")
-local increaseButtonText = increaseScaleButton:CreateFontString(nil, "OVERLAY")
-increaseButtonText:SetFont("Fonts\\FRIZQT__.TTF", 20, "OUTLINE")
-increaseButtonText:SetText("")
-increaseButtonText:SetPoint("CENTER", 0, 0)
-increaseButtonText:SetTextColor(1, 1, 0)
-increaseScaleButton:RegisterForClicks("LeftButtonUp")
-increaseScaleButton:SetScript("OnClick", function()
-  local currentScale = frame:GetScale()
-  local newScale = currentScale + 0.1
-  SetAndSaveScale(newScale)
-end)
-
-local decreaseScaleButton = CreateFrame("Button", "NetherbotDecreaseScaleButton", frame)
-decreaseScaleButton:SetSize(20, 20)
-decreaseScaleButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -5, -5)
-decreaseScaleButton:SetNormalFontObject("GameFontNormal")
-local decreaseButtonText = decreaseScaleButton:CreateFontString(nil, "OVERLAY")
-decreaseButtonText:SetFont("Fonts\\FRIZQT__.TTF", 20, "OUTLINE")
-decreaseButtonText:SetText("")
-decreaseButtonText:SetPoint("CENTER", 0, 0)
-decreaseButtonText:SetTextColor(1, 1, 0)
-decreaseScaleButton:RegisterForClicks("LeftButtonUp")
-decreaseScaleButton:SetScript("OnClick", function()
-  local currentScale = frame:GetScale()
-  local newScale = currentScale - 0.1
-  SetAndSaveScale(newScale)
-end)
-
--- Event handler for addon loading
-local function OnAddonLoaded(self, event, addonName)
-  if addonName == "NetherBot" then
-    -- Check if the scale is saved in the saved variables
-    if NetherbotDB and NetherbotDB.scale then
-      frame:SetScale(NetherbotDB.scale)
-    end
-  end
-end
-
-local addonLoadedFrame = CreateFrame("Frame")
-addonLoadedFrame:RegisterEvent("ADDON_LOADED")
-addonLoadedFrame:SetScript("OnEvent", OnAddonLoaded)
-
-
-
--- Add texture to the increase button
-local increaseTexture = increaseScaleButton:CreateTexture(nil, "BACKGROUND")
-increaseTexture:SetTexture("Interface\\Icons\\spell_chargepositive")
-increaseTexture:SetAllPoints()
-increaseScaleButton:SetNormalTexture(increaseTexture)
--- Add texture to the decrease button
-local decreaseTexture = decreaseScaleButton:CreateTexture(nil, "BACKGROUND")
-decreaseTexture:SetTexture("Interface\\Icons\\spell_chargenegative")
-decreaseTexture:SetAllPoints()
-decreaseScaleButton:SetNormalTexture(decreaseTexture)
-
-
-
--- Follow Button
-local followButton = CreateFrame("Button", "NetherbotFollowButton", frame, "ActionButtonTemplate")
-followButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -35)
-followButton:SetSize(42, 42)
-local followButtonText = followButton:CreateFontString(nil, "OVERLAY")
-followButtonText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE") -- Use the "OUTLINE" flag for text outline
-followButtonText:SetText("Follow")
-followButtonText:SetPoint("CENTER", 0, 0)
-followButtonText:SetTextColor(1, 1, 0) -- Set text color (yellow in this case)
-
-local followTexture = followButton:CreateTexture(nil, "BACKGROUND")
-followTexture:SetTexture("Interface\\Icons\\Ability_Tracking")
-followTexture:SetAllPoints()
-followButton:SetNormalTexture(followTexture)
-
-local followpushedTexture = followButton:CreateTexture(nil, "BACKGROUND")
-followpushedTexture:SetTexture("Interface\\Icons\\Ability_Tracking")
-followpushedTexture:SetAllPoints()
-followButton:SetPushedTexture(followpushedTexture)
-
--- StandStill Button
-local standstillButton = CreateFrame("Button", "NetherbotStandstillButton", frame, "ActionButtonTemplate")
-standstillButton:SetPoint("LEFT", followButton, "RIGHT", 5, 0)
-standstillButton:SetSize(42, 42)
-local standstillButtonText = standstillButton:CreateFontString(nil, "OVERLAY")
-standstillButtonText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE") -- Use the "OUTLINE" flag for text outline
-standstillButtonText:SetText("Stand")
-standstillButtonText:SetPoint("CENTER", 0, 0)
-standstillButtonText:SetTextColor(1, 1, 0) -- Set text color (yellow in this case)
-
-local standstillTexture = standstillButton:CreateTexture(nil, "BACKGROUND")
-standstillTexture:SetTexture("Interface\\Icons\\Inv_misc_map_01")
-standstillTexture:SetAllPoints()
-standstillButton:SetNormalTexture(standstillTexture)
-
-local standstillpushedTexture = standstillButton:CreateTexture(nil, "BACKGROUND")
-standstillpushedTexture:SetTexture("Interface\\Icons\\Inv_misc_map_01")
-standstillpushedTexture:SetAllPoints()
-standstillButton:SetPushedTexture(standstillpushedTexture)
-
---FullStop Button
-local fullstopButton = CreateFrame("Button", "NetherbotfullstopButton", frame, "ActionButtonTemplate")
-fullstopButton:SetPoint("LEFT", standstillButton, "RIGHT", 5, 0)
-fullstopButton:SetSize(42, 42)
-local fullstopButtonText = fullstopButton:CreateFontString(nil, "OVERLAY")
-fullstopButtonText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE") -- Use the "OUTLINE" flag for text outline
-fullstopButtonText:SetText("Stop")
-fullstopButtonText:SetPoint("CENTER", 0, 0)
-fullstopButtonText:SetTextColor(1, 1, 0) -- Set text color (yellow in this case)
-
-local fullstopTexture = fullstopButton:CreateTexture(nil, "BACKGROUND")
-fullstopTexture:SetTexture("Interface\\Icons\\Spell_chargenegative")
-fullstopTexture:SetAllPoints()
-fullstopButton:SetNormalTexture(fullstopTexture)
-
-local fullstoppushedTexture = fullstopButton:CreateTexture(nil, "BACKGROUND")
-fullstoppushedTexture:SetTexture("Interface\\Icons\\Spell_chargenegative")
-fullstoppushedTexture:SetAllPoints()
-fullstopButton:SetPushedTexture(fullstoppushedTexture)
-
--- Slack Button
-local followOnlyButton = CreateFrame("Button", "NetherbotFollowOnlyButton", frame, "ActionButtonTemplate")
-followOnlyButton:SetPoint("LEFT", fullstopButton, "RIGHT", 5, 0)
-followOnlyButton:SetSize(42, 42)
-local followOnlyButtonText = followOnlyButton:CreateFontString(nil, "OVERLAY")
-followOnlyButtonText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE") -- Use the "OUTLINE" flag for text outline
-followOnlyButtonText:SetText("Slack")
-followOnlyButtonText:SetPoint("CENTER", 0, 0)
-followOnlyButtonText:SetTextColor(1, 1, 0) -- Set text color (yellow in this case)
-
-local followOnlyTexture = followOnlyButton:CreateTexture(nil, "BACKGROUND")
-followOnlyTexture:SetTexture("Interface\\Icons\\Spell_Nature_Sleep")
-followOnlyTexture:SetAllPoints()
-followOnlyButton:SetNormalTexture(followOnlyTexture)
-
-local followOnlyPushedTexture = followOnlyButton:CreateTexture(nil, "BACKGROUND")
-followOnlyPushedTexture:SetTexture("Interface\\Icons\\Spell_Nature_Sleep")
-followOnlyPushedTexture:SetAllPoints()
-followOnlyButton:SetPushedTexture(followOnlyPushedTexture)
-
--- Show Button
-local ShowNPCButton = CreateFrame("Button", "NetherbotShow3Button", frame, "ActionButtonTemplate")
-ShowNPCButton:SetPoint("TOPLEFT", followButton, "BOTTOMLEFT", 0, -5)
-ShowNPCButton:SetSize(42, 42)
-local ShowButtonText = ShowNPCButton:CreateFontString(nil, "OVERLAY")
-ShowButtonText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE") -- Use the "OUTLINE" flag for text outline
-ShowButtonText:SetText("UnHide")
-ShowButtonText:SetPoint("CENTER", 0, 0)
-ShowButtonText:SetTextColor(1, 1, 0) -- Set text color (yellow in this case)
-
-local ShowNPCTexture = ShowNPCButton:CreateTexture(nil, "BACKGROUND")
-ShowNPCTexture:SetTexture("Interface\\Icons\\ability_hunter_beastcall")
-ShowNPCTexture:SetAllPoints()
-ShowNPCButton:SetNormalTexture(ShowNPCTexture)
-
-local ShowNPCpushedTexture = ShowNPCButton:CreateTexture(nil, "BACKGROUND")
-ShowNPCpushedTexture:SetTexture("Interface\\Icons\\ability_hunter_beastcall")
-ShowNPCpushedTexture:SetAllPoints()
-ShowNPCButton:SetPushedTexture(ShowNPCpushedTexture)
-
--- Hide Button
-local HideNPCButton = CreateFrame("Button", "NetherbotShow3Button", frame, "ActionButtonTemplate")
-HideNPCButton:SetPoint("LEFT", ShowNPCButton, "RIGHT", 5, 0)
-HideNPCButton:SetSize(42, 42)
-local HideButtonText = HideNPCButton:CreateFontString(nil, "OVERLAY")
-HideButtonText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE") -- Use the "OUTLINE" flag for text outline
-HideButtonText:SetText("Hide")
-HideButtonText:SetPoint("CENTER", 0, 0)
-HideButtonText:SetTextColor(1, 1, 0) -- Set text color (yellow in this case)
-
-local HideNPCTexture = HideNPCButton:CreateTexture(nil, "BACKGROUND")
-HideNPCTexture:SetTexture("Interface\\Icons\\ability_stealth")
-HideNPCTexture:SetAllPoints()
-HideNPCButton:SetNormalTexture(HideNPCTexture)
-
-local HideNPCpushedTexture = HideNPCButton:CreateTexture(nil, "BACKGROUND")
-HideNPCpushedTexture:SetTexture("Interface\\Icons\\ability_stealth")
-HideNPCpushedTexture:SetAllPoints()
-HideNPCButton:SetPushedTexture(HideNPCpushedTexture)
-
-
-
--- Recall Button
-local RecallNPCButton = CreateFrame("Button", "NetherbotShow3Button", frame, "ActionButtonTemplate")
-RecallNPCButton:SetPoint("LEFT", HideNPCButton, "RIGHT", 5, 0)
-RecallNPCButton:SetSize(42, 42)
-local RecallButtonText = RecallNPCButton:CreateFontString(nil, "OVERLAY")
-RecallButtonText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE") -- Use the "OUTLINE" flag for text outline
-RecallButtonText:SetText("Recall")
-RecallButtonText:SetPoint("CENTER", 0, 0)
-RecallButtonText:SetTextColor(1, 1, 0) -- Set text color (yellow in this case)
-
-local RecallNPCTexture = RecallNPCButton:CreateTexture(nil, "BACKGROUND")
-RecallNPCTexture:SetTexture("Interface\\Icons\\Inv_misc_rune_01")
-RecallNPCTexture:SetAllPoints()
-RecallNPCButton:SetNormalTexture(RecallNPCTexture)
-
-local RecallNPCpushedTexture = RecallNPCButton:CreateTexture(nil, "BACKGROUND")
-RecallNPCpushedTexture:SetTexture("Interface\\Icons\\Inv_misc_rune_01")
-RecallNPCpushedTexture:SetAllPoints()
-RecallNPCButton:SetPushedTexture(RecallNPCpushedTexture)
-
--- Unbind Button
-local unbindButton = CreateFrame("Button", "NetherbotUnbindButton", frame, "ActionButtonTemplate")
-unbindButton:SetPoint("LEFT", RecallNPCButton, "RIGHT", 5, 0)  -- Positioning it to the right of the Recall button
-unbindButton:SetSize(42, 42)
-local unbindButtonText = unbindButton:CreateFontString(nil, "OVERLAY")
-unbindButtonText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-unbindButtonText:SetText("Unbind")
-unbindButtonText:SetPoint("CENTER", 0, 0)
-unbindButtonText:SetTextColor(1, 1, 0)
-
-local unbindTexture = unbindButton:CreateTexture(nil, "BACKGROUND")
-unbindTexture:SetTexture("Interface\\Icons\\INV_Misc_Key_14") -- Example texture, change as needed
-unbindTexture:SetAllPoints()
-unbindButton:SetNormalTexture(unbindTexture)
-
-local unbindPushedTexture = unbindButton:CreateTexture(nil, "BACKGROUND")
-unbindPushedTexture:SetTexture("Interface\\Icons\\INV_Misc_Key_14") -- Example texture, change as needed
-unbindPushedTexture:SetAllPoints()
-unbindButton:SetPushedTexture(unbindPushedTexture)
-
--- Unbind Button Function
-unbindButton:SetScript("OnClick", function()
-    SendChatMessage(".npcbot command unbind", "SAY")
-end)
-
-local distanceLabel = standstillButton:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-distanceLabel:SetPoint("BOTTOM", standstillButton, "BOTTOM", 20, -63)
-distanceLabel:SetText(i18n("Follow Distance:"))
-
--- Distance1 Button
-local distance1Button = CreateFrame("Button", "Netherbotdistance1Button", frame, "ActionButtonTemplate")
-distance1Button:SetPoint("TOPLEFT", followButton, "BOTTOMLEFT", 10, -65)
-distance1Button:SetSize(50, 25)
-local distance1ButtonText = distance1Button:CreateFontString(nil, "OVERLAY")
-distance1ButtonText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE") -- Use the "OUTLINE" flag for text outline
-distance1ButtonText:SetText(i18n("Low"))
-distance1ButtonText:SetPoint("CENTER", 0, 0)
-distance1ButtonText:SetTextColor(1, 1, 0) -- Set text color (yellow in this case)
-
-local distance1Texture = distance1Button:CreateTexture(nil, "BACKGROUND")
-distance1Texture:SetTexture("Interface\\Icons\\Inv_misc_punchcards_red")
-distance1Texture:SetAllPoints()
-distance1Button:SetNormalTexture(distance1Texture)
-local distance1pushedTexture = distance1Button:CreateTexture(nil, "BACKGROUND")
-distance1pushedTexture:SetTexture("Interface\\Icons\\Inv_misc_punchcards_red")
-distance1pushedTexture:SetAllPoints()
-distance1Button:SetPushedTexture(distance1pushedTexture)
-
--- Distance2 Button
-local distance2Button = CreateFrame("Button", "Netherbotdistance2Button", frame, "ActionButtonTemplate")
-distance2Button:SetPoint("LEFT", distance1Button, "RIGHT", 5, 0)
-distance2Button:SetSize(50, 25)
-local distance2ButtonText = distance2Button:CreateFontString(nil, "OVERLAY")
-distance2ButtonText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE") -- Use the "OUTLINE" flag for text outline
-distance2ButtonText:SetText(i18n("Medium"))
-distance2ButtonText:SetPoint("CENTER", 0, 0)
-distance2ButtonText:SetTextColor(1, 1, 0) -- Set text color (yellow in this case)
-
-local distance2Texture = distance2Button:CreateTexture(nil, "BACKGROUND")
-distance2Texture:SetTexture("Interface\\Icons\\Inv_misc_punchcards_red")
-distance2Texture:SetAllPoints()
-distance2Button:SetNormalTexture(distance2Texture)
-local distance2pushedTexture = distance2Button:CreateTexture(nil, "BACKGROUND")
-distance2pushedTexture:SetTexture("Interface\\Icons\\Inv_misc_punchcards_red")
-distance2pushedTexture:SetAllPoints()
-distance2Button:SetPushedTexture(distance2pushedTexture)
-
--- Distance3 Button
-local distance3Button = CreateFrame("Button", "Netherbotdistance3Button", frame, "ActionButtonTemplate")
-distance3Button:SetPoint("LEFT", distance2Button, "RIGHT", 5, 0)
-distance3Button:SetSize(50, 25)
-local distance3ButtonText = distance3Button:CreateFontString(nil, "OVERLAY")
-distance3ButtonText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE") -- Use the "OUTLINE" flag for text outline
-distance3ButtonText:SetText(i18n("High"))
-distance3ButtonText:SetPoint("CENTER", 0, 0)
-distance3ButtonText:SetTextColor(1, 1, 0) -- Set text color (yellow in this case)
-
-local distance3Texture = distance3Button:CreateTexture(nil, "BACKGROUND")
-distance3Texture:SetTexture("Interface\\Icons\\Inv_misc_punchcards_red")
-distance3Texture:SetAllPoints()
-distance3Button:SetNormalTexture(distance3Texture)
-local distance3pushedTexture = distance3Button:CreateTexture(nil, "BACKGROUND")
-distance3pushedTexture:SetTexture("Interface\\Icons\\Inv_misc_punchcards_red")
-distance3pushedTexture:SetAllPoints()
-distance3Button:SetPushedTexture(distance3pushedTexture)
-
-
-
-
-local adminButton = CreateFrame("Button", "NetherbotAdminButton", frame, "UIPanelButtonTemplate")
-adminButton:SetSize(60, 20)
-adminButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 10) -- position the button in the bottom right of the frame
-adminButton:SetText(i18n("Admin"))
-adminButton:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
-local raidButton = CreateFrame("Button", "NetherbotRaidButton", frame, "UIPanelButtonTemplate")
-raidButton:SetSize(70, 20)
-raidButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -120, 10) -- position the button in the bottom right of the frame
-raidButton:SetText("RaidFrame")
-raidButton:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
--- Add Revive Button
-local reviveButton = CreateFrame("Button", "NetherbotReviveButton", frame, "UIPanelButtonTemplate")
-reviveButton:SetSize(50, 20)
-reviveButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -70, 10) -- Position between RaidFrame and Admin
-reviveButton:SetText("Revive")
-reviveButton:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
--- Revive Button Function
-reviveButton:SetScript("OnClick", function()
-    SendChatMessage(".npcbot revive", "SAY")
-end)
-
--- Adjust the position of the Admin button to accommodate the new Revive button
-adminButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 10) -- position the button in the bottom right of the frame
-
-
--- Create Admin Buttons
-local buttonAdd = CreateFrame("Button", "NetherbotButtonAdd", adminFrame, "UIPanelButtonTemplate")
-buttonAdd:SetSize(56, 22)
-buttonAdd:SetPoint("TOPLEFT", adminFrame, "TOPLEFT", 10, -35)
-buttonAdd:SetText(i18n("Add"))
-buttonAdd:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
-local buttonRemove = CreateFrame("Button", "NetherbotButtonRemove", adminFrame, "UIPanelButtonTemplate")
-buttonRemove:SetSize(65, 22)
-buttonRemove:SetPoint("TOP", buttonAdd, "BOTTOM", 25, -5)
-buttonRemove:SetText(i18n("Remove"))
-buttonRemove:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
-local buttonRecall = CreateFrame("Button", "NetherbotButtonRecall", adminFrame, "UIPanelButtonTemplate")
-buttonRecall:SetSize(59, 22)
-buttonRecall:SetPoint("LEFT", buttonAdd, "RIGHT", 3, 0)
-buttonRecall:SetText(i18n("Recall"))
-buttonRecall:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
-local buttonBotinfo = CreateFrame("Button", "NetherbotButtonBotInfo", adminFrame, "UIPanelButtonTemplate")
-buttonBotinfo:SetSize(62, 22)
-buttonBotinfo:SetPoint("LEFT", buttonRecall, "RIGHT", 2, 0)
-buttonBotinfo:SetText(i18n("Bot-Info"))
-buttonBotinfo:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
-local buttonMove = CreateFrame("Button", "NetherbotButtonMove", adminFrame, "UIPanelButtonTemplate")
-buttonMove:SetSize(65, 22)
-buttonMove:SetPoint("LEFT", buttonRemove, "RIGHT", 5, 0)
-buttonMove:SetText(i18n("Move"))
-buttonMove:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
-local buttonDelete = CreateFrame("Button", "NetherbotButtonDelete", adminFrame, "UIPanelButtonTemplate")
-buttonDelete:SetSize(60, 22)
-buttonDelete:SetPoint("BOTTOMRIGHT", adminFrame, "BOTTOMRIGHT", -10, 10)
-buttonDelete:SetText(i18n("Delete"))
-buttonDelete:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
-local redemptionButton = CreateFrame("Button", "NetherbotRedemptionButton", adminFrame, "SecureActionButtonTemplate")
-redemptionButton:SetSize(30, 30)
-redemptionButton:SetPoint("BOTTOMLEFT", adminFrame, "BOTTOMLEFT", 10, 10)
-
-local redemptionIcon = redemptionButton:CreateTexture(nil, "BACKGROUND")
-redemptionIcon:SetAllPoints()
-redemptionIcon:SetTexture(select(3, GetSpellInfo(7328)))
-
-redemptionButton:SetNormalTexture(redemptionIcon)
-
-redemptionButton:SetAttribute("type", "spell")
-redemptionButton:SetAttribute("spell", 7328)
-
--- Create the "botLookupButton" button
-local botLookupButton = CreateFrame("Button", "NetherbotBotLookupButton", adminFrame, "UIPanelButtonTemplate")
-botLookupButton:SetSize(65, 22)
-botLookupButton:SetPoint("BOTTOM", adminFrame, "BOTTOM", 0, 10)
-botLookupButton:SetText(i18n("Lookup"))
-botLookupButton:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
-
--- Main Frame Button Functions:
-followButton:SetScript("OnClick", function()
-    SendChatMessage(".npcbot command follow", "SAY")
-  end)
-
-
-standstillButton:SetScript("OnClick", function()
-    SendChatMessage(".npcbot command standstill", "SAY")
-  end)
-
-  fullstopButton:SetScript("OnClick", function()
-    SendChatMessage(".npcbot command stopfully", "SAY")
-  end)
-
-
-  distance1Button:SetScript("OnClick", function()
-    SendChatMessage(".npcbot distance 30", "SAY")
-  end)
-
-  distance2Button:SetScript("OnClick", function()
-    SendChatMessage(".npcbot distance 50", "SAY")
-  end)
-
-  distance3Button:SetScript("OnClick", function()
-    SendChatMessage(".npcbot distance 85", "SAY")
-  end)
-  
-  ShowNPCButton:SetScript("OnClick", function()
-    SendChatMessage(".npcbot unhide", "SAY")
-  end)
-  HideNPCButton:SetScript("OnClick", function()
-    SendChatMessage(".npcbot hide", "SAY")
-  end)
-  
-  RecallNPCButton:SetScript("OnClick", function()
-    SendChatMessage(".npcbot recal teleport", "SAY")
-  end)
-  followOnlyButton:SetScript("OnClick", function()
-    SendChatMessage(".npcbot command follow only", "SAY")
-  end)
-
-
-  adminButton:SetScript("OnClick", function()
-    if adminFrame:IsShown() then
-      adminFrame:Hide()
-    else
-      adminFrame:Show()
-    end
-  end)
-
--- Admin Frame Button Functions
-
-buttonAdd:SetScript("OnClick", function()
-    local target = UnitName("target")
-    if target then
-      -- Target is selected, run command ".npcbot add target"
-      ChatFrame1:AddMessage(".npcbot add " .. target)
-      SendChatMessage(".npcbot add ", "SAY")
-    else
-      -- Target is not selected, prompt input and run command ".npcbot add (input value)"
-      StaticPopupDialogs["ADD_NPC"] = {
-        text = "Enter NPCBOT ID:",
-        button1 = "Ok",
-        button2 = "Cancel",
-        hasEditBox = true,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        OnAccept = function(self)
-          local npc = self.editBox:GetText()
-          ChatFrame1:AddMessage(".npcbot add " .. npc)
-          SendChatMessage(".npcbot add " .. npc, "SAY")
-        end,
-      }
-      StaticPopup_Show("ADD_NPC")
-    end
-  end)
-
-  buttonRemove:SetScript("OnClick", function()
-    local target = UnitName("target")
-    if target then
-      -- Target is selected, run command ".npcbot remove target"
-      ChatFrame1:AddMessage(".npcbot remove " .. target)
-      SendChatMessage(".npcbot remove ", "SAY")
-    else
-      -- Target is not selected, prompt input and run command ".npcbot remove (input value)"
-      StaticPopupDialogs["REMOVE_NPC"] = {
-        text = "Enter NPCBOT ID:",
-        button1 = "Ok",
-        button2 = "Cancel",
-        hasEditBox = true,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        OnAccept = function(self)
-          local npc = self.editBox:GetText()
-          ChatFrame1:AddMessage(".npcbot remove " .. npc)
-          SendChatMessage(".npcbot remove " .. npc, "SAY")
-        end,
-      }
-      StaticPopup_Show("REMOVE_NPC")
-    end
-  end)
-
-  buttonRecall:SetScript("OnClick", function()
-    SendChatMessage(".npcbot recall", "SAY")
-  end)
-
-  buttonBotinfo:SetScript("OnClick", function()
-    SendChatMessage(".npcbot info", "SAY")
-    DoEmote("BONK")
-  end)
-
-  buttonMove:SetScript("OnClick", function()
-    SendChatMessage(".npcbot move", "SAY")
-  end)
-  
-  buttonDelete:SetScript("OnClick", function()
-    StaticPopupDialogs["CONFIRM_DELETE"] = {
-    text = "Are you sure you want to delete?",
-    button1 = "Yes",
-    button2 = "No",
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    OnAccept = function()
-    local target = UnitName("target")
-    if target then
-    -- Target is selected, run command ".npcbot delete target"
-    ChatFrame1:AddMessage(".npcbot delete " .. target)
-    SendChatMessage(".npcbot delete ", "SAY")
-    else
-    -- Target is not selected, prompt input and run command ".npcbot delete (input value)"
-    StaticPopupDialogs["DELETE_NPC"] = {
-    text = "Enter NPCBOT ID:",
-    button1 = "Ok",
-    button2 = "Cancel",
-    hasEditBox = true,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    OnAccept = function(self)
-    local npc = self.editBox:GetText()
-    ChatFrame1:AddMessage(".npcbot delete " .. npc)
-    SendChatMessage(".npcbot delete " .. npc, "SAY")
-    end,
-    }
-    StaticPopup_Show("DELETE_NPC")
-    end
-    end,
-    }
-    StaticPopup_Show("CONFIRM_DELETE")
-    end)
-
-  
-  redemptionButton:SetScript("OnClick", function()
-    ChatFrame1:AddMessage(".npcbot revive")
-    SendChatMessage(".npcbot revive", "SAY")
-end)
-
-  redemptionButton:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText(i18n("Revive Bots"))
-    GameTooltip:Show()
-  end)
-  
-  redemptionButton:SetScript("OnLeave", function(self)
-    GameTooltip:Hide()
-  end)
-
--- Create the lookup frame
-local lookupFrame = CreateFrame("Frame", "NetherbotLookupFrame", UIParent)
-lookupFrame:SetSize(200, 200)
-lookupFrame:SetPoint("CENTER", UIParent, "CENTER")
-lookupFrame:SetBackdrop({
-  bgFile = "Interface/Tooltips/UI-Tooltip-Background",
-  edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-  tile = true, tileSize = 16, edgeSize = 16,
-  insets = { left = 4, right = 4, top = 4, bottom = 4 }
-})
-lookupFrame:SetBackdropColor(0, 0, 1, 0.3)
-lookupFrame:SetBackdropBorderColor(0, 0, 1,1)
-lookupFrame:Hide()
-
-local lookupTitle = lookupFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-lookupTitle:SetPoint("TOPLEFT", lookupFrame, "TOPLEFT", 10, -10)
-lookupTitle:SetText(i18n("Select class:"))
-
-
--- Create the scrollframe for the list
-local lookupScrollFrame = CreateFrame("ScrollFrame", "NetherbotLookupScrollFrame", lookupFrame, "UIPanelScrollFrameTemplate")
-lookupScrollFrame:SetPoint("TOPLEFT", lookupFrame, "TOPLEFT", 4, -25)
-lookupScrollFrame:SetPoint("BOTTOMRIGHT", lookupFrame, "BOTTOMRIGHT", -4, 4)
-
--- Create the list frame
-local lookupList = CreateFrame("Frame", "NetherbotLookupList", lookupScrollFrame)
-lookupList:SetSize(lookupScrollFrame:GetWidth(), lookupScrollFrame:GetHeight())
-lookupScrollFrame:SetScrollChild(lookupList)
-
--- Create the key-value store
-local classTable = {
-  ["Warrior"] = 1,
-  ["Paladin"] = 2,
-  ["Hunter"] = 3,
-  ["Rogue"] = 4,
-  ["Priest"] = 5,
-  ["Death Knight"] = 6,
-  ["Shaman"] = 7,
-  ["Mage"] = 8,
-  ["Warlock"] = 9,
-  ["Druid"] = 11,
-  ["Blademaster"] = 12,
-  ["Sphynx"] = 13,
-  ["Archmage"] = 14,
-  ["Dreadlord"] = 15,
-  ["Spellbreaker"] = 16,
-  ["DarkRanger"] = 17,
-  ["Necromancer"] = 18,
-  ["SeaWitch"] = 19
+-- Saved variables table (declared in the .toc as NetherbotDB)
+NetherbotDB = NetherbotDB or {}
+
+-- ----------------------------------------------------------------------------
+--  THEME
+-- ----------------------------------------------------------------------------
+local FONT = "Fonts\\FRIZQT__.TTF"
+local COL = {
+  panelBg     = { 0.075, 0.067, 0.110, 0.96 },  -- near-black charcoal
+  panelBorder = { 0.42,  0.30,  0.78,  1.00 },  -- violet
+  header      = { 0.13,  0.10,  0.20,  1.00 },
+  accent      = { 0.62,  0.48,  1.00,  1.00 },  -- bright nether violet
+  accentDim   = { 0.42,  0.32,  0.66,  1.00 },
+  btn         = { 0.16,  0.14,  0.22,  1.00 },
+  btnHover    = { 0.26,  0.21,  0.38,  1.00 },
+  btnBorder   = { 0.30,  0.26,  0.42,  1.00 },
+  text        = { 0.91,  0.89,  0.96,  1.00 },
+  textMuted   = { 0.55,  0.52,  0.62,  1.00 },
+  green       = { 0.46,  0.82,  0.45,  1.00 },
+  red         = { 0.90,  0.38,  0.32,  1.00 },
+  barBg       = { 0.10,  0.09,  0.14,  0.90 },
 }
 
--- Create the buttons for the list items
-for key, value in pairs(classTable) do
-  local button = CreateFrame("Button", "NetherbotLookupButton"..value, lookupList, "UIPanelButtonTemplate")
-  button:SetSize(180, 25)
-  button:SetPoint("TOPLEFT", lookupList, "TOPLEFT", 10, -10 - (value-1)*30)
-  button:SetText(i18n(key))
-  button:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
+local SOLID = "Interface\\Buttons\\WHITE8X8"
 
-  -- Handle the button's click event
-  button:SetScript("OnClick", function()
-    SendChatMessage(".npcbot lookup " .. value, "SAY")
-    -- You can add your custom functionality here like running a command or doing some other action
+-- ----------------------------------------------------------------------------
+--  HELPERS
+-- ----------------------------------------------------------------------------
+local function ApplyBackdrop(frame, bg, border, edge)
+  frame:SetBackdrop({
+    bgFile = SOLID, edgeFile = SOLID, edgeSize = edge or 1,
+    insets = { left = 0, right = 0, top = 0, bottom = 0 },
+  })
+  frame:SetBackdropColor(unpack(bg))
+  frame:SetBackdropBorderColor(unpack(border))
+end
+
+local function MakeFS(parent, size, color, flags)
+  local fs = parent:CreateFontString(nil, "OVERLAY")
+  fs:SetFont(FONT, size or 12, flags or "")
+  fs:SetTextColor(unpack(color or COL.text))
+  return fs
+end
+
+-- Section label (small muted caps-style heading)
+local function SectionLabel(parent, text)
+  local fs = MakeFS(parent, 10, COL.textMuted, "")
+  fs:SetText(string.upper(text))
+  return fs
+end
+
+-- Tooltip helper
+local function AttachTooltip(frame, title, body)
+  frame:SetScript("OnEnter", function(self)
+    if frame.OnHoverIn then frame.OnHoverIn(self) end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(title, COL.accent[1], COL.accent[2], COL.accent[3])
+    if body then GameTooltip:AddLine(body, 0.8, 0.8, 0.85, true) end
+    GameTooltip:Show()
+  end)
+  frame:SetScript("OnLeave", function(self)
+    if frame.OnHoverOut then frame.OnHoverOut(self) end
+    GameTooltip:Hide()
   end)
 end
 
--- Create the "hideLookup" button
-local hideLookupButton = CreateFrame("Button", "NetherbotHideLookupButton", lookupFrame, "UIPanelButtonTemplate")
-hideLookupButton:SetSize(21, 20)
-hideLookupButton:SetPoint("TOPRIGHT", lookupFrame, "TOPRIGHT", -10, -8)
-hideLookupButton:SetText(i18n("X"))
-hideLookupButton:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
+-- Flat text button with hover glow
+local function TextButton(parent, w, h, label, onClick, textColor)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(w, h)
+  ApplyBackdrop(b, COL.btn, COL.btnBorder)
+  local fs = MakeFS(b, 12, textColor or COL.text)
+  fs:SetPoint("CENTER")
+  fs:SetText(label)
+  b.label = fs
+  b:SetScript("OnEnter", function(self)
+    self:SetBackdropColor(unpack(COL.btnHover))
+    self:SetBackdropBorderColor(unpack(COL.accent))
+  end)
+  b:SetScript("OnLeave", function(self)
+    self:SetBackdropColor(unpack(COL.btn))
+    self:SetBackdropBorderColor(unpack(COL.btnBorder))
+  end)
+  if onClick then b:SetScript("OnClick", onClick) end
+  return b
+end
 
+-- Icon button (framed icon + caption underneath + tooltip + hover)
+local function IconButton(parent, size, icon, caption, tip, onClick)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(size, size)
+  ApplyBackdrop(b, COL.btn, COL.btnBorder)
 
--- Create the spawnFrame
-local spawnFrame = CreateFrame("Frame", "NetherbotSpawnFrame", lookupFrame)
-spawnFrame:SetSize(200, 60)
-spawnFrame:SetPoint("BOTTOM", lookupFrame, "BOTTOM", 0, -70)
-spawnFrame:SetBackdrop({
-    bgFile = "Interface/BUTTONS/WHITE8X8", 
-    edgeFile = "Interface/BUTTONS/WHITE8X8", 
-    edgeSize = 1, 
-    insets = {left = 0, right = 0, top = 0, bottom = 0}})
-  spawnFrame:SetBackdropColor(0, 0, 1, 0.3)
-  spawnFrame:SetBackdropBorderColor(0, 0, 1,1)
+  local tex = b:CreateTexture(nil, "ARTWORK")
+  tex:SetPoint("TOPLEFT", 3, -3)
+  tex:SetPoint("BOTTOMRIGHT", -3, -3)
+  tex:SetTexture(icon)
+  tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)  -- trim default icon border
+  b.icon = tex
 
--- Create the title
-local spawnTitle = spawnFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-spawnTitle:SetPoint("TOPLEFT", spawnFrame, "TOPLEFT", 10, -10)
-spawnTitle:SetText(i18n("Spawn BOT ID:"))
+  local cap = MakeFS(b, 9, COL.textMuted)
+  cap:SetPoint("TOP", b, "BOTTOM", 0, -2)
+  cap:SetText(caption)
+  b.caption = cap
 
-
--- Create the "buttonSpawnBot" button
-local buttonSpawnBot = CreateFrame("Button", "NetherbotButtonSpawnBot", spawnFrame, "UIPanelButtonTemplate")
-buttonSpawnBot:SetSize(80, 25)
-buttonSpawnBot:SetPoint("BOTTOMLEFT", spawnFrame, "BOTTOMLEFT", 10, 10)
-buttonSpawnBot:SetText(i18n("Spawn Bot"))
-buttonSpawnBot:GetNormalTexture():SetVertexColor(0.10,1.00,0.10)
-
--- Create the "classInput" input box
-local classInput = CreateFrame("EditBox", "NetherbotClassInput", spawnFrame, "InputBoxTemplate")
-classInput:SetSize(80, 25)
-classInput:SetPoint("BOTTOMLEFT", buttonSpawnBot, "BOTTOMRIGHT", 10, 0)
-classInput:SetAutoFocus(false)
-
--- Handle the buttons click event
-buttonSpawnBot:SetScript("OnClick", function()
-  local input = classInput:GetText()
-  if input ~= "" then
-    SendChatMessage(".npcbot spawn "..input, "GUILD")
-    classInput:SetText(i18n(""))
-    classInput:ClearFocus()
-  else
-    print("Please enter an ID:")
+  b.OnHoverIn = function(self)
+    self:SetBackdropBorderColor(unpack(COL.accent))
+    cap:SetTextColor(unpack(COL.accent))
   end
-end)
-
--- Handle Lookup buttons click event
-hideLookupButton:SetScript("OnClick", function()
-    lookupFrame:Hide()
-end)
-
--- Handle the Lookup buttons click event
-botLookupButton:SetScript("OnClick", function()
-  if lookupFrame:IsShown() then
-    lookupFrame:Hide()
-  else
-    lookupFrame:Show()
+  b.OnHoverOut = function(self)
+    self:SetBackdropBorderColor(unpack(COL.btnBorder))
+    cap:SetTextColor(unpack(COL.textMuted))
   end
+  AttachTooltip(b, caption, tip)
+  if onClick then b:SetScript("OnClick", onClick) end
+  return b
+end
+
+local function Say(cmd)
+  SendChatMessage(cmd, "SAY")
+end
+
+-- ----------------------------------------------------------------------------
+--  MAIN FRAME
+-- ----------------------------------------------------------------------------
+local frame = CreateFrame("Frame", "NetherbotFrame", UIParent)
+frame:SetSize(290, 286)
+frame:SetClampedToScreen(true)
+ApplyBackdrop(frame, COL.panelBg, COL.panelBorder)
+frame:SetMovable(true)
+frame:EnableMouse(true)
+frame:RegisterForDrag("LeftButton")
+frame:SetScript("OnDragStart", frame.StartMoving)
+frame:SetScript("OnDragStop", function(self)
+  self:StopMovingOrSizing()
+  local p, _, rp, x, y = self:GetPoint()
+  NetherbotDB.point = { p = p, rp = rp, x = x, y = y }
 end)
 
--- Handle lookupframe movement
--- Make the frame movable
-lookupFrame:SetMovable(true)
-lookupFrame:EnableMouse(true)
+-- Header bar
+local header = CreateFrame("Frame", nil, frame)
+header:SetPoint("TOPLEFT", 1, -1)
+header:SetPoint("TOPRIGHT", -1, -1)
+header:SetHeight(30)
+ApplyBackdrop(header, COL.header, COL.header)
 
-  lookupFrame:SetScript("OnMouseDown", function(self, button)
-    if button == "LeftButton" then
-      self:StartMoving()
+local accentBar = header:CreateTexture(nil, "OVERLAY")
+accentBar:SetTexture(SOLID)
+accentBar:SetVertexColor(unpack(COL.accent))
+accentBar:SetPoint("BOTTOMLEFT", 0, 0)
+accentBar:SetPoint("BOTTOMRIGHT", 0, 0)
+accentBar:SetHeight(2)
+
+local title = MakeFS(header, 14, COL.text, "")
+title:SetPoint("LEFT", header, "LEFT", 10, 0)
+title:SetText("|cffae8bffNether|r|cffe8e4f0Bot|r")
+
+-- Close button
+local closeBtn = TextButton(header, 22, 20, "X", function() frame:Hide() end, COL.red)
+closeBtn:SetPoint("RIGHT", header, "RIGHT", -6, 0)
+
+-- Scale -/+ buttons
+local scaleDown = TextButton(header, 20, 20, "-", function()
+  local s = math.max(0.5, frame:GetScale() - 0.1)
+  frame:SetScale(s); NetherbotDB.scale = s
+end, COL.accent)
+scaleDown:SetPoint("RIGHT", closeBtn, "LEFT", -4, 0)
+
+local scaleUp = TextButton(header, 20, 20, "+", function()
+  local s = math.min(2.0, frame:GetScale() + 0.1)
+  frame:SetScale(s); NetherbotDB.scale = s
+end, COL.accent)
+scaleUp:SetPoint("RIGHT", scaleDown, "LEFT", -2, 0)
+
+-- ---- COMMANDS section ----
+local cmdLabel = SectionLabel(frame, i18n("Commands"))
+cmdLabel:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 12, -10)
+
+local ICON = "Interface\\Icons\\"
+local function row4(anchorFrame, yoff, defs)
+  local size = 50
+  local gap = 8
+  local startx = 14
+  local prev
+  for idx, d in ipairs(defs) do
+    local b = IconButton(frame, size, d.icon, i18n(d.cap), d.tip, d.fn)
+    if idx == 1 then
+      b:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", startx, yoff)
+    else
+      b:SetPoint("LEFT", prev, "RIGHT", gap, 0)
     end
-  end)
-
--- Stop lookupframe movement.
- lookupFrame:SetScript("OnMouseUp", function(self, button)
-   if button == "LeftButton" then
-     self:StopMovingOrSizing()
-  end
-end)
-
--- Slash command to show-hide netherbot.
-SLASH_NETHERBOT1 = "/netherbot"
-function SlashCmdList.NETHERBOT(msg, editbox)
-  if msg == "show" then
-    frame:Show()
-  elseif msg == "hide" then
-    frame:Hide()
-    adminFrame:Hide()
-    lookupFrame:Hide()
+    prev = b
   end
 end
 
--- RAID FRAMES:
+row4(cmdLabel, -6, {
+  { icon = ICON.."Ability_Tracking",       cap = "Follow", tip = "All bots follow you.",                      fn = function() Say(".npcbot command follow") end },
+  { icon = ICON.."Spell_Nature_TimeStop",  cap = "Stand",  tip = "Bots hold their current position.",         fn = function() Say(".npcbot command standstill") end },
+  { icon = ICON.."Spell_ChargeNegative",   cap = "Stop",   tip = "Full stop - bots freeze and ignore all.",   fn = function() Say(".npcbot command stopfully") end },
+  { icon = ICON.."Spell_Nature_Sleep",     cap = "Slack",  tip = "Follow only - bots do nothing but follow.", fn = function() Say(".npcbot command follow only") end },
+})
 
--- Create main frame
-local TeamFrame = CreateFrame("Frame", "TeamFrame", UIParent)
+-- ---- VISIBILITY section ----
+local visLabel = SectionLabel(frame, i18n("Visibility"))
+visLabel:SetPoint("TOPLEFT", cmdLabel, "BOTTOMLEFT", 0, -64)
+
+row4(visLabel, -6, {
+  { icon = ICON.."Ability_Hunter_BeastCall", cap = "Unhide", tip = "Bring your bots back into the world.",       fn = function() Say(".npcbot unhide") end },
+  { icon = ICON.."Ability_Stealth",          cap = "Hide",   tip = "Send bots out of the world temporarily.",    fn = function() Say(".npcbot hide") end },
+  { icon = ICON.."Spell_Arcane_Blink",       cap = "Recall", tip = "Teleport all bots directly to you.",         fn = function() Say(".npcbot recall teleport") end },
+  { icon = ICON.."INV_Misc_Key_14",          cap = "Unbind", tip = "Temporarily release the selected bot.",      fn = function() Say(".npcbot command unbind") end },
+})
+
+-- ---- FOLLOW DISTANCE (segmented control) ----
+local distLabel = SectionLabel(frame, i18n("Follow Distance"))
+distLabel:SetPoint("TOPLEFT", visLabel, "BOTTOMLEFT", 0, -64)
+
+local distButtons = {}
+local function SetActiveDistance(which)
+  for k, b in pairs(distButtons) do
+    if k == which then
+      b:SetBackdropColor(unpack(COL.accentDim))
+      b:SetBackdropBorderColor(unpack(COL.accent))
+      b.label:SetTextColor(unpack(COL.text))
+    else
+      b:SetBackdropColor(unpack(COL.btn))
+      b:SetBackdropBorderColor(unpack(COL.btnBorder))
+      b.label:SetTextColor(unpack(COL.textMuted))
+    end
+  end
+  NetherbotDB.distance = which
+end
+
+local distDefs = {
+  { key = "low",  cap = "Low",    val = 30 },
+  { key = "med",  cap = "Medium", val = 50 },
+  { key = "high", cap = "High",   val = 85 },
+}
+local dprev
+for idx, d in ipairs(distDefs) do
+  local b = TextButton(frame, 84, 24, i18n(d.cap), nil, COL.textMuted)
+  if idx == 1 then
+    b:SetPoint("TOPLEFT", distLabel, "BOTTOMLEFT", 0, -6)
+  else
+    b:SetPoint("LEFT", dprev, "RIGHT", 6, 0)
+  end
+  -- override hover so the active one stays highlighted
+  b:SetScript("OnEnter", function(self) self:SetBackdropBorderColor(unpack(COL.accent)) end)
+  b:SetScript("OnLeave", function(self)
+    if NetherbotDB.distance == d.key then self:SetBackdropBorderColor(unpack(COL.accent))
+    else self:SetBackdropBorderColor(unpack(COL.btnBorder)) end
+  end)
+  b:SetScript("OnClick", function()
+    Say(".npcbot distance " .. d.val)
+    SetActiveDistance(d.key)
+  end)
+  distButtons[d.key] = b
+  dprev = b
+end
+
+-- divider
+local divider = frame:CreateTexture(nil, "ARTWORK")
+divider:SetTexture(SOLID)
+divider:SetVertexColor(COL.btnBorder[1], COL.btnBorder[2], COL.btnBorder[3], 0.8)
+divider:SetPoint("TOPLEFT", distLabel, "BOTTOMLEFT", -2, -40)
+divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, 0)
+divider:SetHeight(1)
+
+-- ---- FOOTER (Raid | Revive | Admin) ----
+local raidButton = TextButton(frame, 84, 26, i18n("Raid"), nil, COL.text)
+raidButton:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 2, -10)
+
+local reviveButton = TextButton(frame, 84, 26, i18n("Revive"), function()
+  Say(".npcbot revive")
+end, COL.green)
+reviveButton:SetPoint("LEFT", raidButton, "RIGHT", 6, 0)
+
+local adminButton = TextButton(frame, 84, 26, i18n("Admin"), nil, COL.accent)
+adminButton:SetPoint("LEFT", reviveButton, "RIGHT", 6, 0)
+
+-- ----------------------------------------------------------------------------
+--  ADMIN FRAME
+-- ----------------------------------------------------------------------------
+local adminFrame = CreateFrame("Frame", "NetherbotAdminFrame", frame)
+adminFrame:SetSize(220, 250)
+adminFrame:SetPoint("TOPRIGHT", frame, "TOPLEFT", -8, 0)
+ApplyBackdrop(adminFrame, COL.panelBg, COL.panelBorder)
+adminFrame:Hide()
+
+local adminHeader = CreateFrame("Frame", nil, adminFrame)
+adminHeader:SetPoint("TOPLEFT", 1, -1); adminHeader:SetPoint("TOPRIGHT", -1, -1)
+adminHeader:SetHeight(26)
+ApplyBackdrop(adminHeader, COL.header, COL.header)
+local adminTitle = MakeFS(adminHeader, 12, COL.accent)
+adminTitle:SetPoint("LEFT", 10, 0)
+adminTitle:SetText(i18n("Admin Tools"))
+
+adminButton:SetScript("OnClick", function()
+  if adminFrame:IsShown() then adminFrame:Hide() else adminFrame:Show() end
+end)
+
+-- popup helper for ID entry
+local function PromptID(name, verb, runWithTarget, runWithID)
+  local target = UnitName("target")
+  if target then
+    runWithTarget(target)
+  else
+    StaticPopupDialogs[name] = {
+      text = i18n("Enter NPCBOT ID:"),
+      button1 = "OK", button2 = "Cancel",
+      hasEditBox = true, timeout = 0, whileDead = true, hideOnEscape = true,
+      OnAccept = function(self)
+        local id = self.editBox:GetText()
+        if id and id ~= "" then runWithID(id) end
+      end,
+      EditBoxOnEnterPressed = function(self)
+        local id = self:GetParent().editBox:GetText()
+        if id and id ~= "" then runWithID(id) end
+        self:GetParent():Hide()
+      end,
+    }
+    StaticPopup_Show(name)
+  end
+end
+
+-- admin grid buttons
+local function AdminBtn(label, onClick, color)
+  return TextButton(adminFrame, 96, 24, i18n(label), onClick, color or COL.text)
+end
+
+local bAdd = AdminBtn("Add", function()
+  PromptID("NB_ADD", "add",
+    function() Say(".npcbot add") end,
+    function(id) Say(".npcbot add " .. id) end)
+end, COL.green)
+bAdd:SetPoint("TOPLEFT", adminHeader, "BOTTOMLEFT", 8, -10)
+
+local bRemove = AdminBtn("Remove", function()
+  PromptID("NB_REMOVE", "remove",
+    function() Say(".npcbot remove") end,
+    function(id) Say(".npcbot remove " .. id) end)
+end, COL.red)
+bRemove:SetPoint("LEFT", bAdd, "RIGHT", 8, 0)
+
+local bMove = AdminBtn("Move", function() Say(".npcbot move") end)
+bMove:SetPoint("TOPLEFT", bAdd, "BOTTOMLEFT", 0, -8)
+
+local bRecall = AdminBtn("Recall", function() Say(".npcbot recall") end)
+bRecall:SetPoint("LEFT", bMove, "RIGHT", 8, 0)
+
+local bInfo = AdminBtn("Bot-Info", function() Say(".npcbot info"); DoEmote("BONK") end)
+bInfo:SetPoint("TOPLEFT", bMove, "BOTTOMLEFT", 0, -8)
+
+local bDelete = AdminBtn("Delete", function()
+  StaticPopupDialogs["NB_CONFIRM_DELETE"] = {
+    text = i18n("Are you sure you want to delete?"),
+    button1 = "Yes", button2 = "No",
+    timeout = 0, whileDead = true, hideOnEscape = true,
+    OnAccept = function()
+      PromptID("NB_DELETE", "delete",
+        function() Say(".npcbot delete") end,
+        function(id) Say(".npcbot delete " .. id) end)
+    end,
+  }
+  StaticPopup_Show("NB_CONFIRM_DELETE")
+end, COL.red)
+bDelete:SetPoint("LEFT", bInfo, "RIGHT", 8, 0)
+
+-- Revive (secure spell cast) - keep secure button for Redemption
+local reviveSpell = CreateFrame("Button", "NetherbotReviveSpell", adminFrame, "SecureActionButtonTemplate")
+reviveSpell:SetSize(30, 30)
+reviveSpell:SetPoint("BOTTOMLEFT", adminFrame, "BOTTOMLEFT", 10, 12)
+ApplyBackdrop(reviveSpell, COL.btn, COL.btnBorder)
+local reviveIcon = reviveSpell:CreateTexture(nil, "ARTWORK")
+reviveIcon:SetPoint("TOPLEFT", 3, -3); reviveIcon:SetPoint("BOTTOMRIGHT", -3, -3)
+reviveIcon:SetTexture(select(3, GetSpellInfo(7328)))  -- Redemption icon
+reviveIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+reviveSpell:SetAttribute("type", "spell")
+reviveSpell:SetAttribute("spell", 7328)
+reviveSpell:SetScript("OnEnter", function(self)
+  self:SetBackdropBorderColor(unpack(COL.accent))
+  GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+  GameTooltip:SetText(i18n("Revive Bots"), COL.accent[1], COL.accent[2], COL.accent[3])
+  GameTooltip:Show()
+end)
+reviveSpell:SetScript("OnLeave", function(self)
+  self:SetBackdropBorderColor(unpack(COL.btnBorder))
+  GameTooltip:Hide()
+end)
+
+local bLookup = AdminBtn("Lookup", nil, COL.accent)
+bLookup:SetSize(110, 26)
+bLookup:SetPoint("BOTTOMRIGHT", adminFrame, "BOTTOMRIGHT", -10, 12)
+
+-- ----------------------------------------------------------------------------
+--  LOOKUP / SPAWN FRAME
+-- ----------------------------------------------------------------------------
+local lookupFrame = CreateFrame("Frame", "NetherbotLookupFrame", UIParent)
+lookupFrame:SetSize(220, 430)
+lookupFrame:SetPoint("CENTER")
+ApplyBackdrop(lookupFrame, COL.panelBg, COL.panelBorder)
+lookupFrame:SetMovable(true); lookupFrame:EnableMouse(true)
+lookupFrame:RegisterForDrag("LeftButton")
+lookupFrame:SetScript("OnDragStart", lookupFrame.StartMoving)
+lookupFrame:SetScript("OnDragStop", lookupFrame.StopMovingOrSizing)
+lookupFrame:Hide()
+
+local lkHeader = CreateFrame("Frame", nil, lookupFrame)
+lkHeader:SetPoint("TOPLEFT", 1, -1); lkHeader:SetPoint("TOPRIGHT", -1, -1)
+lkHeader:SetHeight(26)
+ApplyBackdrop(lkHeader, COL.header, COL.header)
+local lkTitle = MakeFS(lkHeader, 12, COL.accent)
+lkTitle:SetPoint("LEFT", 10, 0)
+lkTitle:SetText(i18n("Select Class"))
+
+local lkClose = TextButton(lkHeader, 22, 20, "X", function() lookupFrame:Hide() end, COL.red)
+lkClose:SetPoint("RIGHT", -6, 0)
+
+bLookup:SetScript("OnClick", function()
+  if lookupFrame:IsShown() then lookupFrame:Hide() else lookupFrame:Show() end
+end)
+
+-- class list (NPCBot lookup IDs)
+local classTable = {
+  { "Warrior", 1 }, { "Paladin", 2 }, { "Hunter", 3 }, { "Rogue", 4 },
+  { "Priest", 5 }, { "Death Knight", 6 }, { "Shaman", 7 }, { "Mage", 8 },
+  { "Warlock", 9 }, { "Druid", 11 }, { "Blademaster", 12 }, { "Sphynx", 13 },
+  { "Archmage", 14 }, { "Dreadlord", 15 }, { "Spellbreaker", 16 },
+  { "DarkRanger", 17 }, { "Necromancer", 18 }, { "SeaWitch", 19 },
+}
+
+local lkScroll = CreateFrame("ScrollFrame", "NetherbotLookupScroll", lookupFrame, "UIPanelScrollFrameTemplate")
+lkScroll:SetPoint("TOPLEFT", lkHeader, "BOTTOMLEFT", 6, -6)
+lkScroll:SetPoint("BOTTOMRIGHT", lookupFrame, "BOTTOMRIGHT", -28, 78)
+local lkList = CreateFrame("Frame", nil, lkScroll)
+lkList:SetSize(170, #classTable * 26)
+lkScroll:SetScrollChild(lkList)
+
+local cprev
+for idx, c in ipairs(classTable) do
+  local b = TextButton(lkList, 168, 22, i18n(c[1]), function() Say(".npcbot lookup " .. c[2]) end)
+  if idx == 1 then b:SetPoint("TOPLEFT", lkList, "TOPLEFT", 2, -2)
+  else b:SetPoint("TOPLEFT", cprev, "BOTTOMLEFT", 0, -4) end
+  cprev = b
+end
+
+-- spawn-by-ID box
+local spawnLabel = SectionLabel(lookupFrame, i18n("Spawn Bot by ID"))
+spawnLabel:SetPoint("BOTTOMLEFT", lookupFrame, "BOTTOMLEFT", 12, 52)
+
+local spawnInput = CreateFrame("EditBox", "NetherbotSpawnInput", lookupFrame, "InputBoxTemplate")
+spawnInput:SetSize(95, 24)
+spawnInput:SetPoint("BOTTOMLEFT", lookupFrame, "BOTTOMLEFT", 14, 14)
+spawnInput:SetAutoFocus(false)
+
+local spawnGo = TextButton(lookupFrame, 80, 24, i18n("Spawn"), function()
+  local id = spawnInput:GetText()
+  if id and id ~= "" then
+    Say(".npcbot spawn " .. id)   -- was GUILD channel in the original; SAY is correct
+    spawnInput:SetText("")
+    spawnInput:ClearFocus()
+  else
+    print("|cffae8bffNetherBot:|r " .. i18n("Please enter an ID."))
+  end
+end, COL.green)
+spawnGo:SetPoint("BOTTOMRIGHT", lookupFrame, "BOTTOMRIGHT", -14, 14)
+
+-- ----------------------------------------------------------------------------
+--  RAID FRAMES (restyled)
+-- ----------------------------------------------------------------------------
+local TeamFrame = CreateFrame("Frame", "NetherbotTeamFrame", UIParent)
 TeamFrame:SetSize(350, 600)
 TeamFrame:SetPoint("CENTER")
-
--- Make the frame draggable
-TeamFrame:SetMovable(true)
-TeamFrame:EnableMouse(true)
+TeamFrame:SetMovable(true); TeamFrame:EnableMouse(true)
 TeamFrame:RegisterForDrag("LeftButton")
 TeamFrame:SetScript("OnDragStart", TeamFrame.StartMoving)
 TeamFrame:SetScript("OnDragStop", TeamFrame.StopMovingOrSizing)
 TeamFrame:Hide()
 
--- Create tables to store information
-local memberFrames = {}
-local healthBars = {}
-local manaBars = {}
-local nameTexts = {}
-local groupFrames = {}
+local memberFrames, healthBars, manaBars, nameTexts, groupFrames = {}, {}, {}, {}, {}
 
--- Initialize frames and bars
-local function initializeFramesAndBars()
+local function InitRaid()
+  if not RAID_CLASS_COLORS then return end
+  for i = 1, #memberFrames do memberFrames[i]:Hide() end
+  memberFrames, healthBars, manaBars, nameTexts = {}, {}, {}, {}
 
-      -- Check if the necessary data is ready
-      if not RAID_CLASS_COLORS then
-        return  -- Data is not ready, exit the function
-    end
+  local num = GetNumRaidMembers()
+  for i = 1, num do
+    local group = math.ceil(i / 5)
+    local position = i - ((group - 1) * 5)
+    local column = (group - 1) % 2
+    local row = math.floor((group - 1) / 2)
 
-    -- Clear old frames and bars
-    for i = 1, #memberFrames do
-        memberFrames[i]:Hide()
-    end
-    memberFrames = {}
-    healthBars = {}
-    manaBars = {}
-    nameTexts = {}
-
-    -- Loop over the raid members
-    local numRaidMembers = GetNumRaidMembers()
-    for i = 1, numRaidMembers do
-        -- Calculate the group (1-8) and position within the group (1-5) of this member
-        local group = math.ceil(i / 5)
-        local position = i - ((group - 1) * 5)
-
-         -- If this is the first member of the group, create a group frame with a title
     if position == 1 then
-        local groupFrame = CreateFrame("Frame", nil, TeamFrame)
-        groupFrame:SetSize(80, 20)  -- Adjust as needed
-
-        -- Calculate the column (0-1) and row (0-7) of the group
-        local column = (group - 1) % 2
-        local row = math.floor((group - 1) / 2)
-        groupFrame:SetPoint("TOPLEFT", TeamFrame, "TOP", 175 * (column - 1), 10 - row * 230)
-
-        -- Set border to the frame
-        groupFrame:SetBackdrop({
-            edgeFile = "Interface/Tooltips/UI-Tooltip-Border",  
-            tile = true, tileSize = 16, edgeSize = 16,
-            insets = { left = 4, right = 4, top = 4, bottom = 4 }
-        })
-
-TeamFrame:SetBackdropBorderColor(1, 0, 0, 0.5)  
-
-        -- Add group title
-        local groupTitle = groupFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        groupTitle:SetPoint("TOP", 0, -3)
-        groupTitle:SetText("Group: "..group)
-        groupTitle:SetTextColor(1, 1, 1)  -- White color
-
-        -- Store the group frame
-        groupFrames[group] = groupFrame
+      local gf = CreateFrame("Frame", nil, TeamFrame)
+      gf:SetSize(150, 20)
+      gf:SetPoint("TOPLEFT", TeamFrame, "TOP", 175 * (column - 1) + 12, 6 - row * 230)
+      local gt = MakeFS(gf, 11, COL.accent)
+      gt:SetPoint("LEFT", 0, 0)
+      gt:SetText(i18n("Group") .. " " .. group)
+      groupFrames[group] = gf
     end
 
-        -- Calculate the column (0-1) and row (0-7) of the group
-        local column = (group - 1) % 2
-        local row = math.floor((group - 1) / 2)
+    local mf = CreateFrame("Button", nil, TeamFrame, "SecureUnitButtonTemplate")
+    mf:SetSize(150, 40)
+    mf:SetPoint("TOPLEFT", TeamFrame, "TOPLEFT", 10 + 175 * column, -10 - ((row * 230) + (position - 1) * 44))
+    mf:SetAttribute("unit", "raid" .. i)
+    mf:RegisterForClicks("AnyUp")
+    SecureUnitButton_OnLoad(mf, "raid" .. i)
+    ApplyBackdrop(mf, COL.barBg, COL.btnBorder)
 
-        -- Create a subframe for each raid member
-        local memberFrame = CreateFrame("Button", nil, TeamFrame, "SecureUnitButtonTemplate")
-        memberFrame:SetSize(150, 42)  -- Adjust size to better fit the new layout
-        memberFrame:SetPoint("TOPLEFT", TeamFrame, "TOPLEFT", 10 + 175 * column, -10 - ((row * 230) + (position - 1) * 42))  -- Adjusted offset to better fit the new layout
-        memberFrame:SetAttribute("unit", "raid"..i)
-        memberFrame:RegisterForClicks("AnyUp")
-        SecureUnitButton_OnLoad(memberFrame, "raid"..i)
-        
-        -- Set border to the frame
-        memberFrame:SetBackdrop({bgFile = "Interface/Tooltips/UI-Tooltip-Background",
-        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",  
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 }
-        })
-        local playerClass, charClass, classIndex = UnitClass("raid"..i)
-        local classColor = RAID_CLASS_COLORS[charClass] or { r = 1, g = 1, b = 1 }  -- Use a default color if characterClass is not found in RAID_CLASS_COLOR - Workaround for the delay of bots spawning
-        memberFrame:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 0.8)  -- Set the border color to class color
-        memberFrame:SetBackdropColor(classColor.r, classColor.g, classColor.b, 0.2)
-        
+    local _, charClass = UnitClass("raid" .. i)
+    local cc = RAID_CLASS_COLORS[charClass] or { r = 1, g = 1, b = 1 }
+    mf:SetBackdropBorderColor(cc.r, cc.g, cc.b, 0.85)
 
-        -- Add the player's name
-        local playerName, playerRealm = UnitName("raid"..i)
-        local playerClass, charClass, classIndex = UnitClass("raid"..i)
-        local classColor = RAID_CLASS_COLORS[charClass] or { r = 1, g = 1, b = 1 }
-        local nameText = memberFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        nameText:SetPoint("TOP", 5, -5)
-        nameText:SetText(playerName)
-        nameText:SetTextColor(classColor.r, classColor.g, classColor.b)
+    local nameText = MakeFS(mf, 11, COL.text)
+    nameText:SetPoint("TOPLEFT", 6, -4)
+    nameText:SetText((UnitName("raid" .. i)))
+    nameText:SetTextColor(cc.r, cc.g, cc.b)
 
-        -- Add the health bar
-        local healthBar = CreateFrame("StatusBar", nil, memberFrame)
-        healthBar:SetStatusBarTexture("Interface\\TARGETINGFRAME\\UI-StatusBar")
-        healthBar:SetPoint("TOP", nameText, "BOTTOM", 0, -2)
-        healthBar:SetSize(100, 8)
-        healthBar:SetMinMaxValues(0, UnitHealthMax("raid"..i))
-        healthBar:SetValue(UnitHealth("raid"..i))
+    local hb = CreateFrame("StatusBar", nil, mf)
+    hb:SetStatusBarTexture(SOLID)
+    hb:SetStatusBarColor(unpack(COL.green))
+    hb:SetPoint("TOPLEFT", 6, -18)
+    hb:SetSize(138, 9)
+    hb:SetMinMaxValues(0, UnitHealthMax("raid" .. i))
+    hb:SetValue(UnitHealth("raid" .. i))
+    local hbbg = hb:CreateTexture(nil, "BACKGROUND")
+    hbbg:SetTexture(SOLID); hbbg:SetVertexColor(0.1, 0.1, 0.12, 0.9); hbbg:SetAllPoints()
 
-        -- Add the mana bar
-        local manaBar = CreateFrame("StatusBar", nil, memberFrame)
-        manaBar:SetStatusBarTexture("Interface\\TARGETINGFRAME\\UI-StatusBar")
-        manaBar:SetStatusBarColor(0, 0, 1)
-        manaBar:SetPoint("TOP", healthBar, "BOTTOM", 0, 0)
-        manaBar:SetSize(100, 8)
-        manaBar:SetMinMaxValues(0, UnitPowerMax("raid"..i))
-        manaBar:SetValue(UnitPower("raid"..i))
+    local mb = CreateFrame("StatusBar", nil, mf)
+    mb:SetStatusBarTexture(SOLID)
+    mb:SetStatusBarColor(0.30, 0.45, 0.95)
+    mb:SetPoint("TOPLEFT", 6, -29)
+    mb:SetSize(138, 6)
+    mb:SetMinMaxValues(0, UnitPowerMax("raid" .. i))
+    mb:SetValue(UnitPower("raid" .. i))
+    local mbbg = mb:CreateTexture(nil, "BACKGROUND")
+    mbbg:SetTexture(SOLID); mbbg:SetVertexColor(0.1, 0.1, 0.12, 0.9); mbbg:SetAllPoints()
 
-        -- Add frames, bars, and texts to the tables
-        memberFrames[i] = memberFrame
-        healthBars[i] = healthBar
-        manaBars[i] = manaBar
-        nameTexts[i] = nameText
-    end
-end
-
--- Event handler for unit health and mana changes
-local function updateHealthAndMana(self, event, unit)
-    for i = 1, #healthBars do
-        if unit == "raid"..i then
-            healthBars[i]:SetMinMaxValues(0, UnitHealthMax(unit))
-            healthBars[i]:SetValue(UnitHealth(unit))
-            manaBars[i]:SetMinMaxValues(0, UnitPowerMax(unit))
-            manaBars[i]:SetValue(UnitPower(unit))
-        end
-    end
-end
-
--- Event handler for raid composition changes
-local function updateRaidComposition(self, event, ...)
-    initializeFramesAndBars()
-end
-
--- Event handler for BotSpawn delay
-local function OnEvent(self, event, ...)
-  if event == "PLAYER_ENTERING_WORLD" or event == "RAID_ROSTER_UPDATE" or event == "ADDON_LOADED" then
-      initializeFramesAndBars()
-  else
-      updateHealthAndMana(self, event, ...)
+    memberFrames[i] = mf; healthBars[i] = hb; manaBars[i] = mb; nameTexts[i] = nameText
   end
 end
 
--- Register events
+local function UpdateBars(_, _, unit)
+  for i = 1, #healthBars do
+    if unit == "raid" .. i then
+      healthBars[i]:SetMinMaxValues(0, UnitHealthMax(unit)); healthBars[i]:SetValue(UnitHealth(unit))
+      manaBars[i]:SetMinMaxValues(0, UnitPowerMax(unit)); manaBars[i]:SetValue(UnitPower(unit))
+    end
+  end
+end
+
+local function OnRaidEvent(self, event, ...)
+  if event == "PLAYER_ENTERING_WORLD" or event == "RAID_ROSTER_UPDATE" or event == "ADDON_LOADED" then
+    InitRaid()
+  else
+    UpdateBars(self, event, ...)
+  end
+end
+
 TeamFrame:RegisterEvent("UNIT_HEALTH")
 TeamFrame:RegisterEvent("UNIT_POWER_UPDATE")
 TeamFrame:RegisterEvent("RAID_ROSTER_UPDATE")
 TeamFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-TeamFrame:SetScript("OnEvent", function(self, event, ...)
-    if event == "PLAYER_ENTERING_WORLD" or event == "RAID_ROSTER_UPDATE" then
-        initializeFramesAndBars()
-    else
-        updateHealthAndMana(self, event, ...)
-    end
-end)
-TeamFrame:SetScript("OnEvent", OnEvent)
+TeamFrame:SetScript("OnEvent", OnRaidEvent)
 
 raidButton:SetScript("OnClick", function()
-  if TeamFrame:IsShown() then
-    TeamFrame:Hide()
-  else
-    initializeFramesAndBars()
-    TeamFrame:Show()
+  if TeamFrame:IsShown() then TeamFrame:Hide() else InitRaid(); TeamFrame:Show() end
+end)
+
+-- ----------------------------------------------------------------------------
+--  LOAD: restore saved scale + position
+-- ----------------------------------------------------------------------------
+local loader = CreateFrame("Frame")
+loader:RegisterEvent("ADDON_LOADED")
+loader:SetScript("OnEvent", function(_, _, name)
+  if name == "NetherBot" then
+    if NetherbotDB.scale then frame:SetScale(NetherbotDB.scale) end
+    if NetherbotDB.point then
+      frame:ClearAllPoints()
+      frame:SetPoint(NetherbotDB.point.p, UIParent, NetherbotDB.point.rp, NetherbotDB.point.x, NetherbotDB.point.y)
+    else
+      frame:SetPoint("CENTER")
+    end
+    if NetherbotDB.distance then SetActiveDistance(NetherbotDB.distance) end
   end
 end)
+
+-- ----------------------------------------------------------------------------
+--  SLASH COMMAND
+-- ----------------------------------------------------------------------------
+SLASH_NETHERBOT1 = "/netherbot"
+SLASH_NETHERBOT2 = "/nb"
+SlashCmdList["NETHERBOT"] = function(msg)
+  msg = string.lower(msg or "")
+  if msg == "hide" then
+    frame:Hide(); adminFrame:Hide(); lookupFrame:Hide(); TeamFrame:Hide()
+  else
+    frame:Show()
+  end
+end

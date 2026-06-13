@@ -1,8 +1,8 @@
 ## Interface: 30300
 ## Title: NetherBot
-## Notes: NetherBot - npcbot tool
-## Author: NetherstormX
-## Version: 1.1
+## Notes: NetherBot - NPCBot control tool (modern UI)
+## Author: NetherstormX (UI rework by Iceymidgit)
+## Version: 2.0
 ## SavedVariables: NetherbotDB
 
 locale.lua
