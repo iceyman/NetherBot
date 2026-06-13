@@ -1,7 +1,7 @@
 -- =============================================================================
 --  NetherBot  -  NPCBot control panel for TrinityCore 3.3.5
 --  Modern dark UI, tabbed (v2.1).  Original addon by NetherstormX.
---  UI rework, bugfixes & feature expansion for Iceymidgit.
+--  UI rework, bugfixes & feature expansion from Iceymidgit.
 --
 --  Tabs:  Control  |  Behavior  |  Manage  |  Create
 --  Adds:  .npcbot createnew builder, behaviour toggles (walk/nocast/nolongcast/
